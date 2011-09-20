@@ -31,6 +31,8 @@
 -type state() :: #memory_buffer{}.
 -include("thrift_transport_behaviour.hrl").
 
+-compile({no_auto_import,[min/2]}).
+
 new() ->
     State = #memory_buffer{buffer = []},
     thrift_transport:new(?MODULE, State).

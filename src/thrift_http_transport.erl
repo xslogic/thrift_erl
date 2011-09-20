@@ -27,6 +27,8 @@
 %% thrift_transport callbacks
 -export([write/2, read/2, flush/1, close/1]).
 
+-compile({no_auto_import,[min/2]}).
+
 -record(http_transport, {host, % string()
                          path, % string()
                          read_buffer, % iolist()
@@ -87,7 +89,7 @@ flush(State = #http_transport{host = Host,
             {State, ok};
         WBinary ->
             {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} =
-              http:request(post,
+              httpc:request(post,
                            {"http://" ++ Host ++ Path,
                             [{"User-Agent", "Erlang/thrift_http_transport"} | ExtraHeaders],
                             "application/x-thrift",

@@ -27,6 +27,8 @@
 %% thrift_transport callbacks
 -export([write/2, read/2, flush/1, close/1]).
 
+-compile({no_auto_import,[min/2]}).
+
 -record(framed_transport, {wrapped, % a thrift_transport
                            read_buffer, % iolist()
                            write_buffer % iolist()
