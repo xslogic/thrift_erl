@@ -21,10 +21,6 @@
 
 -behaviour(thrift_transport).
 
-% Avoiding warning of ambiguous call of overridden auto-imported BIF min/2
-% since there is local min in this module.
--compile({no_auto_import,[min/2]}).
-
 %% API
 -export([new/1]).
 

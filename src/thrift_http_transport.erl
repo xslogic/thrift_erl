@@ -21,10 +21,6 @@
 
 -behaviour(thrift_transport).
 
-% Avoiding warning of ambiguous call of overridden auto-imported BIF min/2
-% since there is local min in this module.
--compile({no_auto_import,[min/2]}).
-
 %% API
 -export([new/2, new/3]).
 
@@ -91,7 +87,7 @@ flush(State = #http_transport{host = Host,
             {State, ok};
         WBinary ->
             {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} =
-              httpc:request(post,
+              http:request(post,
                            {"http://" ++ Host ++ Path,
                             [{"User-Agent", "Erlang/thrift_http_transport"} | ExtraHeaders],
                             "application/x-thrift",

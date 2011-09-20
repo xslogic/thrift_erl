@@ -37,14 +37,12 @@ loop(State0 = #thrift_processor{protocol  = Proto0}) ->
     State1 = State0#thrift_processor{protocol = Proto1},
     case MessageBegin of
         #protocol_message_begin{name = Function,
-                                type = ?tMessageType_CALL,
-                                seqid = Seqid} ->
-            {State2, ok} = handle_function(State1, list_to_atom(Function), Seqid),
+                                type = ?tMessageType_CALL} ->
+            {State2, ok} = handle_function(State1, list_to_atom(Function)),
             loop(State2);
         #protocol_message_begin{name = Function,
-                                type = ?tMessageType_ONEWAY, 
-                                seqid = Seqid} ->
-            {State2, ok} = handle_function(State1, list_to_atom(Function), Seqid),
+                                type = ?tMessageType_ONEWAY} ->
+            {State2, ok} = handle_function(State1, list_to_atom(Function)),
             loop(State2);
         {error, timeout} ->
             thrift_protocol:close_transport(Proto1),
@@ -58,8 +56,7 @@ loop(State0 = #thrift_processor{protocol  = Proto0}) ->
 handle_function(State0=#thrift_processor{protocol = Proto0,
                                          handler = Handler,
                                          service = Service},
-                Function,
-                Seqid) ->
+                Function) ->
     InParams = Service:function_info(Function, params_type),
 
     {Proto1, {ok, Params}} = thrift_protocol:read(Proto0, InParams),
@@ -70,14 +67,14 @@ handle_function(State0=#thrift_processor{protocol = Proto0,
         %% {Micro, Result} = better_timer(Handler, handle_function, [Function, Params]),
         %% error_logger:info_msg("Processed ~p(~p) in ~.4fms~n",
         %%                       [Function, Params, Micro/1000.0]),
-        handle_success(State1, Function, Result, Seqid)
+        handle_success(State1, Function, Result)
     catch
         Type:Data when Type =:= throw orelse Type =:= error ->
-            handle_function_catch(State1, Function, Type, Data, Seqid)
+            handle_function_catch(State1, Function, Type, Data)
     end.
 
 handle_function_catch(State = #thrift_processor{service = Service},
-                      Function, ErrType, ErrData, Seqid) ->
+                      Function, ErrType, ErrData) ->
     IsOneway = Service:function_info(Function, reply_type) =:= oneway_void,
 
     case {ErrType, ErrData} of
@@ -90,27 +87,26 @@ handle_function_catch(State = #thrift_processor{service = Service},
 
         {throw, Exception} when is_tuple(Exception), size(Exception) > 0 ->
             %error_logger:warning_msg("~p threw exception: ~p~n", [Function, Exception]),
-            handle_exception(State, Function, Exception, Seqid);
+            handle_exception(State, Function, Exception);
             % we still want to accept more requests from this client
 
         {error, Error} ->
-            handle_error(State, Function, Error, Seqid)
+            handle_error(State, Function, Error)
     end.
 
 handle_success(State = #thrift_processor{service = Service},
                Function,
-               Result,
-               Seqid) ->
+               Result) ->
     ReplyType  = Service:function_info(Function, reply_type),
     StructName = atom_to_list(Function) ++ "_result",
 
     case Result of
         {reply, ReplyData} ->
             Reply = {{struct, [{0, ReplyType}]}, {StructName, ReplyData}},
-            send_reply(State, Function, ?tMessageType_REPLY, Reply, Seqid);
+            send_reply(State, Function, ?tMessageType_REPLY, Reply);
 
         ok when ReplyType == {struct, []} ->
-            send_reply(State, Function, ?tMessageType_REPLY, {ReplyType, {StructName}}, Seqid);
+            send_reply(State, Function, ?tMessageType_REPLY, {ReplyType, {StructName}});
 
         ok when ReplyType == oneway_void ->
             %% no reply for oneway void
@@ -119,8 +115,7 @@ handle_success(State = #thrift_processor{service = Service},
 
 handle_exception(State = #thrift_processor{service = Service},
                  Function,
-                 Exception,
-                 Seqid) ->
+                 Exception) ->
     ExceptionType = element(1, Exception),
     %% Fetch a structure like {struct, [{-2, {struct, {Module, Type}}},
     %%                                  {-3, {struct, {Module, Type}}}]}
@@ -143,20 +138,20 @@ handle_exception(State = #thrift_processor{service = Service},
                                                 % Make sure we got at least one defined
     case lists:all(fun(X) -> X =:= undefined end, ExceptionList) of
         true ->
-            handle_unknown_exception(State, Function, Exception, Seqid);
+            handle_unknown_exception(State, Function, Exception);
         false ->
-            send_reply(State, Function, ?tMessageType_REPLY, {ReplySpec, ExceptionTuple}, Seqid)
+            send_reply(State, Function, ?tMessageType_REPLY, {ReplySpec, ExceptionTuple})
     end.
 
 %%
 %% Called when an exception has been explicitly thrown by the service, but it was
 %% not one of the exceptions that was defined for the function.
 %%
-handle_unknown_exception(State, Function, Exception, Seqid) ->
+handle_unknown_exception(State, Function, Exception) ->
     handle_error(State, Function, {exception_not_declared_as_thrown,
-                                   Exception}, Seqid).
+                                   Exception}).
 
-handle_error(State, Function, Error, Seqid) ->
+handle_error(State, Function, Error) ->
     Stack = erlang:get_stacktrace(),
     error_logger:error_msg("~p had an error: ~p~n", [Function, {Error, Stack}]),
 
@@ -172,13 +167,13 @@ handle_error(State, Function, Error, Seqid) ->
              #'TApplicationException'{
                 message = Message,
                 type = ?TApplicationException_UNKNOWN}},
-    send_reply(State, Function, ?tMessageType_EXCEPTION, Reply, Seqid).
+    send_reply(State, Function, ?tMessageType_EXCEPTION, Reply).
 
-send_reply(State = #thrift_processor{protocol = Proto0}, Function, ReplyMessageType, Reply, Seqid) ->
+send_reply(State = #thrift_processor{protocol = Proto0}, Function, ReplyMessageType, Reply) ->
     {Proto1, ok} = thrift_protocol:write(Proto0, #protocol_message_begin{
                                            name = atom_to_list(Function),
                                            type = ReplyMessageType,
-                                           seqid = Seqid}),
+                                           seqid = 0}),
     {Proto2, ok} = thrift_protocol:write(Proto1, Reply),
     {Proto3, ok} = thrift_protocol:write(Proto2, message_end),
     {Proto4, ok} = thrift_protocol:flush_transport(Proto3),
